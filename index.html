@@ -378,8 +378,9 @@
         }
 
 
-        // 점수 계산 및 결과 표시 함수 (기존 로직 유지)
+        // 점수 계산 및 결과 표시 함수 (강화된 오류 처리 포함)
         function calculateScore() {
+            // 1. 최종 페이지 완료 확인
             if (!checkPageCompletion(currentPage)) {
                 showMessage("현재 페이지의 모든 문항에 응답해야 채점 결과를 볼 수 있습니다.");
                 return;
@@ -388,90 +389,108 @@
             const form = document.getElementById('resilience-form');
             const answers = {};
             
-            // 1. 모든 문항 응답 점수 취합
-            QUESTIONS_DATA.forEach(q => {
-                const id = q[0];
-                const selector = `input[name="q${id}"]:checked`;
-                const checkedRadio = form.querySelector(selector);
-                
-                // checkPageCompletion에서 이미 확인했으므로 null은 발생하지 않음
-                answers[id] = parseInt(checkedRadio.value);
-            });
+            try {
+                // 2. 모든 문항 응답 점수 취합
+                QUESTIONS_DATA.forEach(q => {
+                    const id = q[0];
+                    const selector = `input[name="q${id}"]:checked`;
+                    const checkedRadio = form.querySelector(selector);
+                    
+                    if (checkedRadio) {
+                        answers[id] = parseInt(checkedRadio.value);
+                    } else {
+                        // 이론적으로 checkPageCompletion에서 걸러져야 하지만, 만약을 위해 오류 발생
+                        throw new Error(`문항 ${id}의 응답을 찾을 수 없습니다.`);
+                    }
+                });
 
-            // 2. 점수 계산 (역채점 포함)
-            const subFactorScores = {}; // 소항목 점수
-            const mainFactorScores = { "자기조절능력": 0, "대인관계능력": 0, "긍정성": 0 }; // 대항목 점수
-            let totalScore = 0;
-
-            QUESTIONS_DATA.forEach(q => {
-                const [id, , mainFactor, subFactor, isReversed] = q;
-                const rawScore = answers[id];
-                let score = rawScore;
-
-                if (isReversed) {
-                    // 역채점: 1->5, 2->4, 3->3, 4->2, 5->1
-                    score = 6 - rawScore;
+                // 3. 최종 데이터 무결성 검사
+                const expectedCount = QUESTIONS_DATA.length;
+                if (Object.keys(answers).length !== expectedCount) {
+                    throw new Error(`총 ${expectedCount} 문항 중 ${Object.keys(answers).length}개만 응답되었습니다. 누락된 문항이 있습니다.`);
                 }
+
+
+                // 4. 점수 계산 (역채점 포함)
+                const subFactorScores = {}; // 소항목 점수
+                const mainFactorScores = { "자기조절능력": 0, "대인관계능력": 0, "긍정성": 0 }; // 대항목 점수
+                let totalScore = 0;
+
+                QUESTIONS_DATA.forEach(q => {
+                    const [id, , mainFactor, subFactor, isReversed] = q;
+                    const rawScore = answers[id];
+                    let score = rawScore;
+
+                    if (isReversed) {
+                        // 역채점: 1->5, 2->4, 3->3, 4->2, 5->1
+                        score = 6 - rawScore;
+                    }
+                    
+                    // 소항목 점수 누적
+                    subFactorScores[subFactor] = (subFactorScores[subFactor] || 0) + score;
+
+                    // 대항목 점수 누적
+                    mainFactorScores[mainFactor] += score;
+
+                    // 전체 점수 누적
+                    totalScore += score;
+                });
+
+                // 5. 결과 표시 업데이트
                 
-                // 소항목 점수 누적
-                subFactorScores[subFactor] = (subFactorScores[subFactor] || 0) + score;
+                // a. 항목별 상세 점수 테이블 업데이트
+                const scoreDetails = document.getElementById('score-details');
+                scoreDetails.innerHTML = '';
 
-                // 대항목 점수 누적
-                mainFactorScores[mainFactor] += score;
-
-                // 전체 점수 누적
-                totalScore += score;
-            });
-
-            // 3. 결과 표시 업데이트
-            
-            // a. 항목별 상세 점수 테이블 업데이트
-            const scoreDetails = document.getElementById('score-details');
-            scoreDetails.innerHTML = '';
-
-            const subFactorsOrdered = [
-                "감정조절력", "충동통제력", "원인분석력",
-                "소통능력", "공감능력", "자아확장력",
-                "자아낙관성", "생활만족도", "감사하기"
-            ];
-            
-            let currentFactorName = "";
-            
-            subFactorsOrdered.forEach(subFactor => {
-                const factorData = QUESTIONS_DATA.find(q => q[3] === subFactor);
-                const mainFactor = factorData ? factorData[2] : '';
-                const score = subFactorScores[subFactor];
+                const subFactorsOrdered = [
+                    "감정조절력", "충동통제력", "원인분석력",
+                    "소통능력", "공감능력", "자아확장력",
+                    "자아낙관성", "생활만족도", "감사하기"
+                ];
                 
-                if (mainFactor && mainFactor !== currentFactorName) {
-                    // 대항목 헤더 추가
-                    const header = document.createElement('div');
-                    header.className = 'bg-gray-100 p-3 font-extrabold text-gray-700 text-lg rounded-t-lg mt-4 shadow-inner';
-                    header.textContent = `${mainFactor} (총점: ${mainFactorScores[mainFactor]}점 / 평균: ${FACTORS_INFO[mainFactor].avg}점)`;
-                    scoreDetails.appendChild(header);
-                    currentFactorName = mainFactor;
-                }
+                let currentFactorName = "";
                 
-                // 소항목 점수 행 추가
-                const row = document.createElement('div');
-                row.className = 'flex justify-between items-center p-3 border-b border-gray-100 hover:bg-gray-50';
-                row.innerHTML = `
-                    <span class="text-gray-700 font-medium">${subFactor}</span>
-                    <span class="text-indigo-600 font-bold text-xl">${score}점</span>
-                `;
-                scoreDetails.appendChild(row);
-            });
+                subFactorsOrdered.forEach(subFactor => {
+                    const factorData = QUESTIONS_DATA.find(q => q[3] === subFactor);
+                    const mainFactor = factorData ? factorData[2] : '';
+                    const score = subFactorScores[subFactor];
+                    
+                    if (mainFactor && mainFactor !== currentFactorName) {
+                        // 대항목 헤더 추가
+                        const header = document.createElement('div');
+                        header.className = 'bg-gray-100 p-3 font-extrabold text-gray-700 text-lg rounded-t-lg mt-4 shadow-inner';
+                        header.textContent = `${mainFactor} (총점: ${mainFactorScores[mainFactor]}점 / 평균: ${FACTORS_INFO[mainFactor].avg}점)`;
+                        scoreDetails.appendChild(header);
+                        currentFactorName = mainFactor;
+                    }
+                    
+                    // 소항목 점수 행 추가
+                    const row = document.createElement('div');
+                    row.className = 'flex justify-between items-center p-3 border-b border-gray-100 hover:bg-gray-50';
+                    row.innerHTML = `
+                        <span class="text-gray-700 font-medium">${subFactor}</span>
+                        <span class="text-indigo-600 font-bold text-xl">${score}점</span>
+                    `;
+                    scoreDetails.appendChild(row);
+                });
 
-            // b. 전체 점수 및 해석 업데이트
-            document.getElementById('total-score').textContent = totalScore;
-            document.getElementById('interpretation').innerHTML = TOTAL_INFO.interpretation(totalScore);
+                // b. 전체 점수 및 해석 업데이트
+                document.getElementById('total-score').textContent = totalScore;
+                document.getElementById('interpretation').innerHTML = TOTAL_INFO.interpretation(totalScore);
 
-            // c. 그래프 업데이트
-            updateChart(mainFactorScores);
+                // c. 그래프 업데이트
+                updateChart(mainFactorScores);
 
-            // d. 결과 컨테이너 표시
-            document.getElementById('test-container').classList.add('hidden');
-            document.getElementById('results-container').classList.remove('hidden');
-            window.scrollTo({ top: 0, behavior: 'smooth' }); // 결과 페이지로 스크롤 이동
+                // d. 결과 컨테이너 표시
+                document.getElementById('test-container').classList.add('hidden');
+                document.getElementById('results-container').classList.remove('hidden');
+                window.scrollTo({ top: 0, behavior: 'smooth' }); // 결과 페이지로 스크롤 이동
+
+            } catch (error) {
+                // 오류 발생 시 메시지 출력
+                console.error("점수 계산 중 심각한 오류가 발생했습니다:", error);
+                showMessage(`점수 계산에 실패했습니다. (${error.message || '알 수 없는 오류'})`);
+            }
         }
 
         // 막대 그래프 생성/업데이트 함수
