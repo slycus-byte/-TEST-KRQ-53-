@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>회복탄력성 TEST (KRQ-53)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js CDN for graphical results -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <style>
+        body { font-family: 'Inter', 'Noto Sans KR', sans-serif; background-color: #f3f4f6; }
+        .likert-radio-wrapper { width: 20%; text-align: center; } /* 5점 척도 라디오 버튼 영역 */
+        /* 인쇄 시 테스트 폼 숨기기 및 결과 표시 */
+        @media print {
+            #test-container, #message-box, #footer-buttons {
+                display: none !important;
+            }
+            #results-container {
+                display: block !important;
+                /* 인쇄 시 불필요한 테두리 및 그림자 제거 */
+                box-shadow: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8">
+
+    <div id="test-container" class="max-w-4xl mx-auto bg-white p-6 sm:p-10 rounded-xl shadow-2xl">
+        <h1 class="text-3xl sm:text-4xl font-extrabold text-center mb-6 text-indigo-700">
+            회복탄력성 TEST (KRQ-53)
+        </h1>
+        <!-- 척도 설명 업데이트 -->
+        <p class="text-center text-gray-500 mb-8">
+            다음 문항을 읽고, 자신에게 해당하는 점수를 선택해주세요. (5점 척도: (1) 전혀 그렇지 않다 ~ (5) 매우 그렇다)
+        </p>
+
+        <div id="pagination-status" class="text-center mb-6 text-lg font-semibold text-indigo-600">
+            <!-- 페이지 상태 표시 (JS 삽입) -->
+        </div>
+
+        <div class="overflow-x-auto">
+            <!-- 척도 헤더 -->
+            <div class="flex bg-indigo-50 border-b border-indigo-200 sticky top-0 z-10 rounded-t-lg text-sm sm:text-base font-semibold text-gray-600">
+                <div class="w-10 p-3 flex-shrink-0">No.</div>
+                <div class="flex-grow p-3">문항</div>
+                <!-- 척도 헤더 레이블 업데이트 (1, 3, 5) -->
+                <div class="flex-shrink-0 w-60 sm:w-80 flex justify-between p-3">
+                    <span class="text-xs sm:text-sm text-center flex-1">전혀 그렇지 않다 (1)</span>
+                    <span class="text-xs sm:text-sm text-center flex-1">보통이다 (3)</span>
+                    <span class="text-xs sm:text-sm text-center flex-1">매우 그렇다 (5)</span>
+                </div>
+            </div>
+
+            <!-- 문항 목록 (페이지 단위로 생성) -->
+            <form id="resilience-form" class="space-y-2">
+                <!-- 페이지 내용이 여기에 동적으로 생성됩니다 -->
+            </form>
+        </div>
+
+        <!-- 페이지 이동 및 결과 버튼 -->
+        <div id="navigation-buttons" class="mt-10 flex justify-center space-x-4">
+            <button id="prev-button" onclick="prevPage()" disabled
+                class="px-6 py-3 bg-gray-300 text-gray-700 font-bold rounded-xl shadow-md hover:bg-gray-400 transition duration-300 disabled:opacity-50">
+                이전 문제 (←)
+            </button>
+            <button id="next-button" onclick="nextPage()"
+                class="px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-lg hover:bg-indigo-700 transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50">
+                다음 문제 (→)
+            </button>
+            <button id="submit-button" onclick="calculateScore()" style="display: none;"
+                class="px-10 py-3 bg-green-600 text-white font-bold rounded-xl shadow-lg hover:bg-green-700 transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50">
+                채점 결과 보기
+            </button>
+        </div>
+    </div>
+
+    <!-- 결과 표시 섹션 -->
+    <div id="results-container" class="max-w-4xl mx-auto mt-12 hidden">
+        <div class="bg-white p-6 sm:p-10 rounded-xl shadow-2xl">
+            <h2 class="text-3xl font-extrabold text-center mb-8 text-green-700">
+                진단 결과
+            </h2>
+
+            <!-- 그래프 섹션 -->
+            <div class="mb-10 p-6 border border-gray-200 rounded-xl">
+                <h3 class="text-xl font-bold mb-4 text-gray-700">섹션별 점수 그래프</h3>
+                <div class="h-64">
+                    <canvas id="scoreChart"></canvas>
+                </div>
+            </div>
+
+            <!-- 항목별 점수 테이블 -->
+            <div class="mb-10 p-6 border border-gray-200 rounded-xl">
+                <h3 class="text-xl font-bold mb-4 text-gray-700">항목별 상세 점수</h3>
+                <div id="score-details" class="space-y-4">
+                    <!-- 항목별 상세 점수 (JS 삽입) -->
+                </div>
+            </div>
+
+            <!-- 최종 점수 및 해석 -->
+            <div class="p-8 bg-green-50 border-4 border-green-300 rounded-xl text-center">
+                <h3 class="text-2xl font-extrabold mb-3 text-green-800">
+                    나의 회복탄력성 점수: <span id="total-score" class="text-4xl text-red-600 ml-2"></span>점
+                </h3>
+                <p class="text-sm font-semibold text-gray-600 mb-6">
+                    (한국인 평균: 195점 / 만점: 265점)
+                </p>
+
+                <div id="interpretation" class="text-lg text-gray-700 font-medium leading-relaxed">
+                    <!-- 해석 (JS 삽입) -->
+                </div>
+
+                <div class="mt-6 text-sm text-gray-500">
+                    <p>회복탄력성 점수 기준:</p>
+                    <ul class="list-disc list-inside mt-2 mx-auto inline-block text-left">
+                        <li>200점 이상: 웬만한 불행한 사건은 당신을 흔들지 못합니다.</li>
+                        <li>180점~200점: 보통 정도의 수준입니다. 조금만 더 노력합시다.</li>
+                        <li>180점 이하: 사소한 부정적 사건에 쉽게 영향을 받습니다.</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <!-- 결과 페이지 버튼 -->
+            <div id="footer-buttons" class="mt-8 flex justify-center space-x-4">
+                <button onclick="resetTest()"
+                    class="px-6 py-3 bg-indigo-500 text-white font-bold rounded-xl shadow-md hover:bg-indigo-600 transition duration-300">
+                    다시 검사하기
+                </button>
+                <button onclick="printResults()"
+                    class="px-6 py-3 bg-gray-700 text-white font-bold rounded-xl shadow-md hover:bg-gray-800 transition duration-300">
+                    결과 화면 인쇄 (PDF 저장)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="message-box" class="fixed bottom-5 right-5 bg-red-600 text-white px-6 py-3 rounded-xl shadow-xl transition-opacity duration-300 opacity-0 pointer-events-none">
+        <!-- 경고 메시지 -->
+    </div>
+
+    <script>
+        const QUESTIONS_DATA = [
+            // [No, Question, FactorName, SubFactorName, IsReversed]
+            [1, "나는 어려운 일이 닥쳤을 때 감정을 통제할 수 있다.", "자기조절능력", "감정조절력", false],
+            [2, "내가 무슨 생각을 하면, 그 생각이 내 기분에 어떤 영향을 미칠지 잘 알아챈다.", "자기조절능력", "감정조절력", false],
+            [3, "논쟁거리가 되는 문제를 가족이나 친구들과 토론할 때 내 감정을 잘 통제할 수 있다.", "자기조절능력", "감정조절력", false],
+            [4, "집중해야 할 중요한 일이 생기면 신바람이 나기보다는 스트레스를 받는 편이다.", "자기조절능력", "감정조절력", true],
+            [5, "나는 내 감정에 잘 휘말린다.", "자기조절능력", "감정조절력", true],
+            [6, "때때로 내 감정적인 문제 때문에 학교나 직장에서 공부하거나 일할 때 집중하기 힘들다.", "자기조절능력", "감정조절력", true],
+            [7, "당장 해야 할 일이 있으면 나는 어떠한 유혹이나 방해도 잘 이겨내고 할 일을 한다.", "자기조절능력", "충동통제력", false],
+            [8, "아무리 당황스럽고 어려운 상황이 닥쳐도, 나는 내가 어떤 생각을 하고 있는지 스스로 잘 안다.", "자기조절능력", "충동통제력", false],
+            [9, "누군가가 나에게 화를 낼 경우 나는 우선 그 사람의 의견을 듣는다.", "자기조절능력", "충동통제력", false],
+            [10, "일이 생각한 대로 잘 안 풀리면 쉽게 포기하는 편이다.", "자기조절능력", "충동통제력", true],
+            [11, "평소 경제적인 소비나 지출 규모에 대해 별 다른 계획 없이 지낸다.", "자기조절능력", "충동통제력", true],
+            [12, "미리 계획을 세우기보다는 즉흥적으로 일을 처리하는 편이다.", "자기조절능력", "충동통제력", true],
+            [13, "문제가 생기면 여러 가지 가능한 해결 방안에 대해 먼저 생각한 후에 해결하려고 노력한다.", "자기조절능력", "원인분석력", false],
+            [14, "어려운 일이 생기면 그 원인이 무엇인지 신중하게 생각한 후에 그 문제를 해결하려고 노력한다.", "자기조절능력", "원인분석력", false],
+            [15, "나는 대부분의 상황에서 문제의 원인을 잘 알고 있다고 믿는다.", "자기조절능력", "원인분석력", false],
+            [16, "나는 사건이나 상황을 잘 파악하지 못한다는 이야기를 종종 듣는다.", "자기조절능력", "원인분석력", true],
+            [17, "문제가 생기면 나는 성급하게 결론을 내린다는 이야기를 종종 듣는다.", "자기조절능력", "원인분석력", true],
+            [18, "어려운 일이 생기면 그 원인을 완전히 이해하지 못했다 하더라도 일단 빨리 해결하는 것이 좋다고 생각한다.", "자기조절능력", "원인분석력", true],
+            [19, "나는 분위기나 대화 상대에 따라 대화를 잘 이끌어 갈 수 있다.", "대인관계능력", "소통능력", false],
+            [20, "나는 재치 있는 농담을 잘한다.", "대인관계능력", "소통능력", false],
+            [21, "나는 내가 표현하고자 하는 바에 대한 적절한 문구나 단어를 잘 찾아낸다.", "대인관계능력", "소통능력", false],
+            [22, "나는 윗사람과 대화하는 것이 부담스럽다.", "대인관계능력", "소통능력", true],
+            [23, "나는 대화 중에 다른 생각을 하느라 대화 내용을 놓칠 때가 종종 있다.", "대인관계능력", "소통능력", true],
+            [24, "대화를 할 때 하고 싶은 말을 다 하지 못하고 주저할 때가 종종 있다.", "대인관계능력", "소통능력", true],
+            [25, "사람들의 얼굴 표정을 보면 어떤 감정인지 잘 알 수 있다.", "대인관계능력", "공감능력", false],
+            [26, "슬퍼하거나 화를 내거나 당황하는 사람을 보면 그들이 어떤 생각을 하는지 잘 알 수 있다.", "대인관계능력", "공감능력", false],
+            [27, "동료와 화를 낼 경우 나는 그 이유를 꽤 잘 아는 편이다.", "대인관계능력", "공감능력", false],
+            [28, "나는 사람들의 행동 방식을 때로 이해하기 힘들다.", "대인관계능력", "공감능력", true],
+            [29, "친한 친구나 애인 혹은 배우자로부터 '당신은 나를 이해 못해'라는 말을 종종 듣는다.", "대인관계능력", "공감능력", true],
+            [30, "동료와 친구들은 내가 자기 말을 잘 듣지 않는다고 한다.", "대인관계능력", "공감능력", true],
+            [31, "나는 내 주변 사람들로부터 사랑과 관심을 받고 있다.", "대인관계능력", "자아확장력", false],
+            [32, "나는 내 친구들을 정말로 좋아한다.", "대인관계능력", "자아확장력", false],
+            [33, "내 주변 사람들은 내 기분을 잘 이해한다.", "대인관계능력", "자아확장력", false],
+            [34, "서로 도움을 주고 받는 친구가 별로 없는 편이다.", "대인관계능력", "자아확장력", true],
+            [35, "나와 정기적으로 만나는 사람들은 대부분 나를 싫어하게 된다.", "대인관계능력", "자아확장력", true],
+            [36, "서로 마음을 터놓고 얘기할 수 있는 친구가 거의 없다.", "대인관계능력", "자아확장력", true],
+            [37, "열심히 일하면 언제나 보답이 있으리라고 생각한다.", "긍정성", "자아낙관성", false],
+            [38, "힘든 일 아니더라도, '아무리 어려운 문제라도 나는 해결할 수 있다'고 일단 믿는 것이 좋다고 생각한다.", "긍정성", "자아낙관성", false],
+            [39, "어려운 상황이 닥쳐도 나는 모든 일이 다 잘 해결될 거라고 확신한다.", "긍정성", "자아낙관성", false],
+            [40, "내가 어떤 일을 마치고 나면, 주변 사람들이 부정적인 평가를 할까봐 걱정한다.", "긍정성", "자아낙관성", true],
+            [41, "내가 일어나는 대부분의 문제는 나로서는 어쩔 수 없는 상황에 의해 발생한다고 믿는다.", "긍정성", "자아낙관성", true],
+            [42, "누가 나의 미래에 대해 물어보면, 성공한 나의 모습을 상상하기 힘들다.", "긍정성", "자아낙관성", true],
+            [43, "내 삶은 내가 생각하는 이상적인 삶에 가깝다.", "긍정성", "생활만족도", false],
+            [44, "내 인생의 여러 가지 조건들은 만족스럽다.", "긍정성", "생활만족도", false],
+            [45, "나는 내 삶에 만족한다.", "긍정성", "생활만족도", false],
+            [46, "나는 내 삶에서 중요하다고 생각한 것들은 다 갖고 있다.", "긍정성", "생활만족도", false],
+            [47, "나는 다시 태어나도 나의 현재 삶을 다시 살고 싶다.", "긍정성", "생활만족도", false],
+            [48, "나는 다양한 종류의 많은 사람들에게 고마움을 느낀다.", "긍정성", "감사하기", false],
+            [49, "내가 고맙게 여기는 것들을 모두 적는다면, 아주 긴 목록이 될 것이다.", "긍정성", "감사하기", false],
+            [50, "나이가 들어갈수록 내 삶의 일부가 된 사람, 사건, 생활에 대해 감사하는 마음이 더 커져간다.", "긍정성", "감사하기", false],
+            [51, "나는 감사해야 할 것이 별로 없다.", "긍정성", "감사하기", true],
+            [52, "세상을 둘러 볼 때, 내가 고마워 할 것은 별로 없다.", "긍정성", "감사하기", true],
+            [53, "사람이나 일에 대한 고마움을 한참 시간이 지난 후에야 겨우 느낀다.", "긍정성", "감사하기", true]
+        ];
+
+        const FACTORS_INFO = {
+            "자기조절능력": { avg: 63.5, max: 90, cutoffs: { great: 75, good: 70, low: 63, very_low: 55 } },
+            "대인관계능력": { avg: 67.8, max: 90, cutoffs: { great: 80, good: 74, low: 67, very_low: 62 } },
+            "긍정성": { avg: 63.4, max: 85, cutoffs: { great: 75, good: 70, low: 63, very_low: 56 } }
+        };
+
+        const TOTAL_INFO = {
+            avg: 195,
+            max: 265,
+            interpretation: (score) => {
+                if (score >= 200) {
+                    return "<strong><span class='text-red-600'>매우 뛰어남:</span> 웬만한 불행한 사건은 당신을 흔들지 못합니다. 당신은 압도적인 회복탄력성을 가지고 있습니다.</strong>";
+                } else if (score >= 180) {
+                    return "<strong><span class='text-amber-600'>보통 수준:</span> 보통 정도의 수준입니다. 조금만 더 노력하면 더 뛰어난 회복탄력성을 가질 수 있습니다.</strong>";
+                } else {
+                    return "<strong><span class='text-blue-600'>노력 필요:</span> 180점 이하로, 사소한 부정적 사건에 쉽게 영향을 받습니다. 회복탄력성 향상을 위한 적극적인 노력이 필요합니다.</strong>";
+                }
+            }
+        };
+
+        const MAIN_FACTORS_ORDER = ["자기조절능력", "대인관계능력", "긍정성"];
+        const PAGES = MAIN_FACTORS_ORDER.map(factorName => 
+            QUESTIONS_DATA.filter(q => q[2] === factorName)
+        );
+        let currentPage = 0; // 0부터 시작
+
+        // 폼 생성 및 페이지 초기화
+        document.addEventListener('DOMContentLoaded', () => {
+            const form = document.getElementById('resilience-form');
+            
+            PAGES.forEach((pageQuestions, pageIndex) => {
+                const pageContainer = document.createElement('div');
+                pageContainer.className = 'test-page space-y-2';
+                pageContainer.dataset.page = pageIndex;
+                pageContainer.style.display = 'none';
+
+                const factorName = MAIN_FACTORS_ORDER[pageIndex];
+                
+                // 섹션 헤더 추가
+                const factorElement = document.createElement('div');
+                factorElement.className = 'bg-indigo-100/50 p-3 mt-4 mb-2 rounded-lg border-l-4 border-indigo-500 shadow-sm text-lg font-bold text-indigo-700 sticky top-14 z-5';
+                factorElement.innerHTML = `<div>${factorName}</div>`;
+                pageContainer.appendChild(factorElement);
+
+                pageQuestions.forEach(q => {
+                    const [id, text, , , isReversed] = q;
+
+                    // 질문 항목 생성
+                    const item = document.createElement('div');
+                    item.className = 'flex items-center border-b border-gray-100 hover:bg-gray-50 transition duration-150';
+
+                    // 문항 번호 및 텍스트
+                    const questionContent = document.createElement('div');
+                    questionContent.className = 'w-10 p-3 flex-shrink-0 text-gray-500 font-medium';
+                    questionContent.textContent = id;
+                    item.appendChild(questionContent);
+
+                    const questionText = document.createElement('div');
+                    questionText.className = 'flex-grow p-3 text-gray-700 text-sm sm:text-base';
+                    questionText.textContent = `${text} ${isReversed ? '(역채점)' : ''}`;
+                    item.appendChild(questionText);
+
+                    // 라디오 버튼 5점 척도
+                    const radioContainer = document.createElement('div');
+                    radioContainer.className = 'flex-shrink-0 w-60 sm:w-80 flex justify-between p-3';
+                    
+                    for (let i = 1; i <= 5; i++) {
+                        const label = document.createElement('label');
+                        // likert-label을 likert-radio-wrapper로 변경하여 CSS 충돌 방지
+                        label.className = 'likert-radio-wrapper cursor-pointer'; 
+                        label.innerHTML = `
+                            <input type="radio" name="q${id}" value="${i}" class="form-radio h-4 w-4 text-indigo-600 focus:ring-indigo-500 transition duration-150" required>
+                        `;
+                        radioContainer.appendChild(label);
+                    }
+
+                    item.appendChild(radioContainer);
+                    pageContainer.appendChild(item);
+                });
+                form.appendChild(pageContainer);
+            });
+
+            // 초기 페이지 표시
+            showPage(0);
+        });
+
+        // 현재 페이지 표시 및 버튼 상태 업데이트
+        function showPage(index) {
+            const pages = document.querySelectorAll('.test-page');
+            const prevBtn = document.getElementById('prev-button');
+            const nextBtn = document.getElementById('next-button');
+            const submitBtn = document.getElementById('submit-button');
+            const status = document.getElementById('pagination-status');
+
+            pages.forEach((page, i) => {
+                page.style.display = (i === index) ? 'block' : 'none';
+            });
+
+            currentPage = index;
+            status.textContent = `제 ${currentPage + 1}부 / 총 ${PAGES.length}부 (${MAIN_FACTORS_ORDER[currentPage]})`;
+
+            // 버튼 상태 업데이트
+            prevBtn.disabled = (currentPage === 0);
+            
+            if (currentPage === PAGES.length - 1) {
+                // 마지막 페이지
+                nextBtn.style.display = 'none';
+                submitBtn.style.display = 'inline-block';
+            } else {
+                // 중간 페이지
+                nextBtn.style.display = 'inline-block';
+                submitBtn.style.display = 'none';
+            }
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // 현재 페이지 응답 완료 여부 확인
+        function checkPageCompletion(pageIndex) {
+            const questions = PAGES[pageIndex];
+            for (const q of questions) {
+                const id = q[0];
+                const selector = `input[name="q${id}"]:checked`;
+                if (!document.querySelector(selector)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // 다음 페이지 이동
+        function nextPage() {
+            if (!checkPageCompletion(currentPage)) {
+                showMessage("현재 페이지의 모든 문항에 응답해주세요.");
+                return;
+            }
+            if (currentPage < PAGES.length - 1) {
+                showPage(currentPage + 1);
+            }
+        }
+
+        // 이전 페이지 이동
+        function prevPage() {
+            if (currentPage > 0) {
+                showPage(currentPage - 1);
+            }
+        }
+
+        // 테스트 초기화
+        function resetTest() {
+            document.getElementById('resilience-form').reset();
+            document.getElementById('results-container').classList.add('hidden');
+            document.getElementById('test-container').classList.remove('hidden');
+            // Chart.js 인스턴스 파괴 (메모리 관리)
+            if (scoreChart) {
+                scoreChart.destroy();
+                scoreChart = null;
+            }
+            showPage(0); // 첫 페이지로 이동
+        }
+
+        // 결과 화면 인쇄 (PDF 저장 대체)
+        function printResults() {
+            // 인쇄 전 결과 컨테이너가 보이도록 보장
+            document.getElementById('test-container').classList.add('hidden');
+            document.getElementById('results-container').classList.remove('hidden');
+            
+            // 인쇄 기능 호출
+            window.print();
+
+            // 참고: window.print()를 사용하면 브라우저의 인쇄 대화 상자가 열리며, 
+            // '대상'을 'PDF로 저장'으로 설정하여 PDF 파일로 저장할 수 있습니다.
+            // 완전한 PDF 파일 생성은 복잡하므로 이 방법이 가장 간단한 대체 구현입니다.
+        }
+
+
+        // 점수 계산 및 결과 표시 함수 (기존 로직 유지)
+        function calculateScore() {
+            if (!checkPageCompletion(currentPage)) {
+                showMessage("현재 페이지의 모든 문항에 응답해야 채점 결과를 볼 수 있습니다.");
+                return;
+            }
+
+            const form = document.getElementById('resilience-form');
+            const answers = {};
+            
+            // 1. 모든 문항 응답 점수 취합
+            QUESTIONS_DATA.forEach(q => {
+                const id = q[0];
+                const selector = `input[name="q${id}"]:checked`;
+                const checkedRadio = form.querySelector(selector);
+                
+                // checkPageCompletion에서 이미 확인했으므로 null은 발생하지 않음
+                answers[id] = parseInt(checkedRadio.value);
+            });
+
+            // 2. 점수 계산 (역채점 포함)
+            const subFactorScores = {}; // 소항목 점수
+            const mainFactorScores = { "자기조절능력": 0, "대인관계능력": 0, "긍정성": 0 }; // 대항목 점수
+            let totalScore = 0;
+
+            QUESTIONS_DATA.forEach(q => {
+                const [id, , mainFactor, subFactor, isReversed] = q;
+                const rawScore = answers[id];
+                let score = rawScore;
+
+                if (isReversed) {
+                    // 역채점: 1->5, 2->4, 3->3, 4->2, 5->1
+                    score = 6 - rawScore;
+                }
+                
+                // 소항목 점수 누적
+                subFactorScores[subFactor] = (subFactorScores[subFactor] || 0) + score;
+
+                // 대항목 점수 누적
+                mainFactorScores[mainFactor] += score;
+
+                // 전체 점수 누적
+                totalScore += score;
+            });
+
+            // 3. 결과 표시 업데이트
+            
+            // a. 항목별 상세 점수 테이블 업데이트
+            const scoreDetails = document.getElementById('score-details');
+            scoreDetails.innerHTML = '';
+
+            const subFactorsOrdered = [
+                "감정조절력", "충동통제력", "원인분석력",
+                "소통능력", "공감능력", "자아확장력",
+                "자아낙관성", "생활만족도", "감사하기"
+            ];
+            
+            let currentFactorName = "";
+            
+            subFactorsOrdered.forEach(subFactor => {
+                const factorData = QUESTIONS_DATA.find(q => q[3] === subFactor);
+                const mainFactor = factorData ? factorData[2] : '';
+                const score = subFactorScores[subFactor];
+                
+                if (mainFactor && mainFactor !== currentFactorName) {
+                    // 대항목 헤더 추가
+                    const header = document.createElement('div');
+                    header.className = 'bg-gray-100 p-3 font-extrabold text-gray-700 text-lg rounded-t-lg mt-4 shadow-inner';
+                    header.textContent = `${mainFactor} (총점: ${mainFactorScores[mainFactor]}점 / 평균: ${FACTORS_INFO[mainFactor].avg}점)`;
+                    scoreDetails.appendChild(header);
+                    currentFactorName = mainFactor;
+                }
+                
+                // 소항목 점수 행 추가
+                const row = document.createElement('div');
+                row.className = 'flex justify-between items-center p-3 border-b border-gray-100 hover:bg-gray-50';
+                row.innerHTML = `
+                    <span class="text-gray-700 font-medium">${subFactor}</span>
+                    <span class="text-indigo-600 font-bold text-xl">${score}점</span>
+                `;
+                scoreDetails.appendChild(row);
+            });
+
+            // b. 전체 점수 및 해석 업데이트
+            document.getElementById('total-score').textContent = totalScore;
+            document.getElementById('interpretation').innerHTML = TOTAL_INFO.interpretation(totalScore);
+
+            // c. 그래프 업데이트
+            updateChart(mainFactorScores);
+
+            // d. 결과 컨테이너 표시
+            document.getElementById('test-container').classList.add('hidden');
+            document.getElementById('results-container').classList.remove('hidden');
+            window.scrollTo({ top: 0, behavior: 'smooth' }); // 결과 페이지로 스크롤 이동
+        }
+
+        // 막대 그래프 생성/업데이트 함수
+        let scoreChart = null;
+        function updateChart(scores) {
+            const ctx = document.getElementById('scoreChart').getContext('2d');
+            const data = {
+                labels: Object.keys(scores),
+                datasets: [{
+                    label: '나의 회복탄력성 섹션별 점수',
+                    data: Object.values(scores),
+                    backgroundColor: ['#4f46e5', '#10b981', '#f97316'], // Indigo, Green, Orange
+                    borderColor: ['#4338ca', '#059669', '#ea580c'],
+                    borderWidth: 1,
+                    maxBarThickness: 50,
+                }]
+            };
+
+            const maxScores = Object.keys(scores).map(key => FACTORS_INFO[key].max);
+            
+            if (scoreChart) {
+                scoreChart.data.labels = data.labels;
+                scoreChart.data.datasets[0].data = data.datasets[0].data;
+                scoreChart.options.scales.y.max = Math.max(...maxScores);
+                scoreChart.update();
+            } else {
+                scoreChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: data,
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top',
+                            },
+                            title: {
+                                display: false,
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: Math.max(...maxScores), // 최대 점수에 맞게 Y축 설정
+                                title: {
+                                    display: true,
+                                    text: '점수',
+                                    font: { size: 14, weight: 'bold' }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        // 메시지 박스 표시 함수 (alert 대체)
+        function showMessage(message) {
+            const msgBox = document.getElementById('message-box');
+            msgBox.textContent = message;
+            msgBox.classList.remove('opacity-0', 'pointer-events-none');
+            msgBox.classList.add('opacity-100');
+
+            setTimeout(() => {
+                msgBox.classList.remove('opacity-100');
+                msgBox.classList.add('opacity-0', 'pointer-events-none');
+            }, 3000);
+        }
+
+    </script>
+
+</body>
+</html>
